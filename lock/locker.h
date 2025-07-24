@@ -8,36 +8,50 @@
 class sem
 {
 public:
-    sem()
+    sem()   //调用 sem_init 初始化信号量，初始值为 0。
     {
         if (sem_init(&m_sem, 0, 0) != 0)
-        {
+        {   //如果初始化失败，抛出 std::exception()，表示构造失败（通常是权限问题或内存不足等）。
             throw std::exception();
         }
     }
-    sem(int num)
+
+    sem(int num)    //调用 sem_init 初始化信号量，初始值为num。
     {
         if (sem_init(&m_sem, 0, num) != 0)
-        {
+        {   //第2个参数 0：表示这是线程间共享（非进程间共享）。
             throw std::exception();
         }
     }
-    ~sem()
+
+    ~sem()  //在对象销毁时自动释放底层信号量资源，防止内存泄漏或资源泄露。
     {
         sem_destroy(&m_sem);
     }
+    // RAII（资源获取即初始化）思想的体现。
+
     bool wait()
     {
         return sem_wait(&m_sem) == 0;
     }
-    bool post()
-    {
+    /*
+        尝试获取一个资源：
+
+        如果 m_sem > 0，则立即成功，并将 m_sem - 1。
+
+        如果 m_sem == 0，则阻塞等待。
+    */
+
+    bool post()     //释放一个资源
+    {   //如果有线程因为信号量为0而在 sem_wait() 中阻塞，那么唤醒一个它。
         return sem_post(&m_sem) == 0;
     }
 
 private:
     sem_t m_sem;
 };
+
+
 class locker
 {
 public:
@@ -68,6 +82,8 @@ public:
 private:
     pthread_mutex_t m_mutex;
 };
+
+
 class cond
 {
 public:
