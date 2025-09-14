@@ -62,26 +62,68 @@ public:
             throw std::exception();
         }
     }
+    /*
+        调用 pthread_mutex_init 初始化互斥锁。
+
+        第二个参数为 NULL，表示使用默认属性。
+
+        如果初始化失败，就抛出 std::exception()，防止程序继续运行。
+    */
+
     ~locker()
     {
         pthread_mutex_destroy(&m_mutex);
     }
+    /*
+        销毁对象时自动调用。
+
+        释放互斥锁资源，防止资源泄露。
+    */
+
     bool lock()
     {
         return pthread_mutex_lock(&m_mutex) == 0;
     }
+    /*
+        加锁（进入临界区）。
+
+        如果锁当前被其他线程占用，当前线程会阻塞等待直到获得锁。
+
+        返回值为 true 表示加锁成功。
+    */
+
     bool unlock()
     {
         return pthread_mutex_unlock(&m_mutex) == 0;
     }
+    /*
+        解锁（退出临界区）。
+
+        解锁失败的可能情况：当前线程没有持有这把锁。
+
+        返回值为 true 表示解锁成功。
+    */
+
     pthread_mutex_t *get()
     {
         return &m_mutex;
     }
+    /*
+        返回互斥锁对象的地址，便于传给其他需要 pthread_mutex_t* 参数的接口。
+
+        举例：某些条件变量初始化时需要传入互斥锁地址。
+    */
 
 private:
     pthread_mutex_t m_mutex;
 };
+/*
+    POSIX（Portable Operating System Interface）：是 UNIX 类操作系统的标准接口规范。
+
+    pthread（POSIX thread）：是 POSIX 定义的一套线程编程 API，广泛用于 Linux、Unix 等系统。
+
+    mutex（mutual exclusion，互斥）
+*/
 
 
 class cond
