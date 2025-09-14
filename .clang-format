@@ -1,0 +1,30 @@
+# 基于 Google 风格
+BasedOnStyle: Google
+
+# 缩进相关
+IndentWidth: 4             # 每级缩进 4 空格
+TabWidth: 4                # 一个 Tab 代表 4 空格
+UseTab: Always             # 使用 Tab缩进
+
+# 换行与大括号
+ColumnLimit: 100           # 每行最大字符数（超出自动换行）
+BreakBeforeBraces: Allman  # 大括号另起一行（Allman 风格）
+AllowShortFunctionsOnASingleLine: Empty
+
+# 空格规则
+SpaceBeforeParens: ControlStatements   # if/for/while 后加空格
+SpacesInParentheses: false             # 括号内部不要空格
+SpacesInSquareBrackets: false
+SpaceAfterCStyleCast: true
+
+# 指针与引用
+PointerAlignment: Right     # int *p;
+ReferenceAlignment: Right   # int &ref;
+
+# 函数定义与声明
+AlignAfterOpenBracket: Align
+AllowAllArgumentsOnNextLine: false
+
+# 其它
+SortIncludes: true         # 自动排序 #include
+IncludeBlocks: Regroup     # 按系统头文件/项目头文件分组

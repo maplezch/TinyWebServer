@@ -1,30 +1,33 @@
 #ifndef LOCKER_H
 #define LOCKER_H
 
-#include <exception>
 #include <pthread.h>
 #include <semaphore.h>
 
+#include <exception>
+
+
 class sem
 {
-public:
-    sem()   //调用 sem_init 初始化信号量，初始值为 0。
+   public:
+    sem()  // 调用 sem_init 初始化信号量，初始值为 0。
     {
         if (sem_init(&m_sem, 0, 0) != 0)
-        {   //如果初始化失败，抛出 std::exception()，表示构造失败（通常是权限问题或内存不足等）。
+        {  // 如果初始化失败，抛出
+           // std::exception()，表示构造失败（通常是权限问题或内存不足等）。
             throw std::exception();
         }
     }
 
-    sem(int num)    //调用 sem_init 初始化信号量，初始值为num。
+    sem(int num)  // 调用 sem_init 初始化信号量，初始值为num。
     {
         if (sem_init(&m_sem, 0, num) != 0)
-        {   //第2个参数 0：表示这是线程间共享（非进程间共享）。
+        {  // 第2个参数 0：表示这是线程间共享（非进程间共享）。
             throw std::exception();
         }
     }
 
-    ~sem()  //在对象销毁时自动释放底层信号量资源，防止内存泄漏或资源泄露。
+    ~sem()  // 在对象销毁时自动释放底层信号量资源，防止内存泄漏或资源泄露。
     {
         sem_destroy(&m_sem);
     }
@@ -42,19 +45,18 @@ public:
         如果 m_sem == 0，则阻塞等待。
     */
 
-    bool post()     //释放一个资源
-    {   //如果有线程因为信号量为0而在 sem_wait() 中阻塞，那么唤醒一个它。
+    bool post()  // 释放一个资源
+    {            // 如果有线程因为信号量为0而在 sem_wait() 中阻塞，那么唤醒一个它。
         return sem_post(&m_sem) == 0;
     }
 
-private:
-    sem_t m_sem;
+   private:
+    sem_t m_sem;  // sem_t 是 POSIX 信号量（semaphore） 的数据类型
 };
-
 
 class locker
 {
-public:
+   public:
     locker()
     {
         if (pthread_mutex_init(&m_mutex, NULL) != 0)
@@ -114,26 +116,27 @@ public:
         举例：某些条件变量初始化时需要传入互斥锁地址。
     */
 
-private:
+   private:
     pthread_mutex_t m_mutex;
 };
 /*
-    POSIX（Portable Operating System Interface）：是 UNIX 类操作系统的标准接口规范。
+    POSIX（Portable Operating System Interface）：是 UNIX
+   类操作系统的标准接口规范。
 
-    pthread（POSIX thread）：是 POSIX 定义的一套线程编程 API，广泛用于 Linux、Unix 等系统。
+    pthread（POSIX thread）：是 POSIX 定义的一套线程编程 API，广泛用于
+   Linux、Unix 等系统。
 
     mutex（mutual exclusion，互斥）
 */
 
-
 class cond
 {
-public:
+   public:
     cond()
     {
         if (pthread_cond_init(&m_cond, NULL) != 0)
         {
-            //pthread_mutex_destroy(&m_mutex);
+            // pthread_mutex_destroy(&m_mutex);
             throw std::exception();
         }
     }
@@ -144,30 +147,31 @@ public:
     bool wait(pthread_mutex_t *m_mutex)
     {
         int ret = 0;
-        //pthread_mutex_lock(&m_mutex);
+        // pthread_mutex_lock(&m_mutex);
         ret = pthread_cond_wait(&m_cond, m_mutex);
-        //pthread_mutex_unlock(&m_mutex);
+        // pthread_mutex_unlock(&m_mutex);
         return ret == 0;
     }
     bool timewait(pthread_mutex_t *m_mutex, struct timespec t)
     {
         int ret = 0;
-        //pthread_mutex_lock(&m_mutex);
+        // pthread_mutex_lock(&m_mutex);
         ret = pthread_cond_timedwait(&m_cond, m_mutex, &t);
-        //pthread_mutex_unlock(&m_mutex);
+        // pthread_mutex_unlock(&m_mutex);
         return ret == 0;
     }
+
     bool signal()
     {
         return pthread_cond_signal(&m_cond) == 0;
     }
+
     bool broadcast()
     {
         return pthread_cond_broadcast(&m_cond) == 0;
     }
 
-private:
-    //static pthread_mutex_t m_mutex;
-    pthread_cond_t m_cond;
+   private:
+    pthread_cond_t m_cond;  // pthread_cond_t（POSIX 线程库里的条件变量）
 };
 #endif
