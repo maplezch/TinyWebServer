@@ -135,11 +135,11 @@ class cond
 	{
 		if (pthread_cond_init(&m_cond, NULL) != 0)
 		{
-			throw std::exception();
+			throw std::exception();	 // 仅报错，没有错误信息
 		}
 
 		// pthread_cond_init 初始化一个条件变量 m_cond。
-		// 第二个参数传 NULL，表示使用默认属性。
+		// 第二个参数传 NULL，表示使用默认属性。（属性主要有进程共享与时钟两种）
 		// 如果初始化失败，抛出异常。
 	}
 
@@ -151,7 +151,7 @@ class cond
 		// RAII 思路：对象生命周期结束时自动释放资源。
 	}
 
-	bool wait(pthread_mutex_t *m_mutex)
+	bool wait(pthread_mutex_t *m_mutex)	 // 返回 true 表示成功，false 表示失败。
 	{
 		int ret = 0;
 
@@ -164,7 +164,9 @@ class cond
 	// 线程阻塞等待 m_cond 被唤醒；
 	// 被唤醒后重新加锁 m_mutex，然后返回。
 	// 线程在某个条件未满足时等待，直到其他线程发信号唤醒它。
-	// 返回 true 表示成功，false 表示失败。
+	// 返回 0 表示成功（被唤醒且没有检测到错误）。
+	// 返回非 0 表示失败，返回值是一个 errno 风格的错误码（可以用 strerror(ret) /
+	// strerror_r查看文本说明）。
 
 	bool timewait(pthread_mutex_t *m_mutex, struct timespec t)
 	{
