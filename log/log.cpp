@@ -86,11 +86,11 @@ void Log::write_log(int level, const char *format, ...)
 {
 	struct timeval now = {0, 0};  // 表示 时间点（精确到微秒）
 
-	gettimeofday(&now, NULL);
+	gettimeofday(&now, NULL);  // 1970年到现在的当前时间
 
 	time_t t = now.tv_sec;
 
-	struct tm *sys_tm = localtime(&t);
+	struct tm *sys_tm = localtime(&t);	// 转换为本地时间
 
 	struct tm my_tm = *sys_tm;
 
@@ -113,20 +113,28 @@ void Log::write_log(int level, const char *format, ...)
 			strcpy(s, "[info]:");
 			break;
 	}
+
 	// 写入一个log，对m_count++, m_split_lines最大行数
 	m_mutex.lock();
 	m_count++;
 
 	if (m_today != my_tm.tm_mday || m_count % m_split_lines == 0)  // everyday log
 	{
+		// m_today != my_tm.tm_mday表示当前系统的“日”发生了变化（即跨天了），需要新建当天的日志文件
+		// m_count % m_split_lines == 0表示日志条数达到了分割阈值
+		// m_split_lines，需要切出一个新的日志文件
+
+		fflush(m_fp);  // 刷新缓冲区，把日志缓冲中的数据写入文件。
+		fclose(m_fp);  // 关闭当前正在写的日志文件
+
 		char new_log[256] = {0};
-		fflush(m_fp);
-		fclose(m_fp);
+
 		char tail[16] = {0};
 
 		snprintf(tail, 16, "%d_%02d_%02d_", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday);
 
-		if (m_today != my_tm.tm_mday)
+		if (m_today !=
+			my_tm.tm_mday)	// 当前系统的“日”发生了变化（即跨天了），需要新建当天的日志文件
 		{
 			snprintf(new_log, 255, "%s%s%s", dir_name, tail, log_name);
 			m_today = my_tm.tm_mday;
@@ -142,8 +150,9 @@ void Log::write_log(int level, const char *format, ...)
 
 	m_mutex.unlock();
 
-	va_list valst;
-	va_start(valst, format);
+	va_list valst;			  // 一个用于遍历可变参数的类型（在 <stdarg.h> / <cstdarg> 中定义）
+	va_start(valst, format);  // 把 valst 初始化为指向 format 之后第一个可变参数的位置，使你可以用
+							  // va_arg 逐个读取可变参数。
 
 	string log_str;
 	m_mutex.lock();
@@ -154,30 +163,36 @@ void Log::write_log(int level, const char *format, ...)
 					 now.tv_usec, s);
 
 	int m = vsnprintf(m_buf + n, m_log_buf_size - n - 1, format, valst);
+	// vsnprintf 会根据 format 中的格式说明符读取 valst 中的参数并格式化字符串。vsnprintf 会消耗
+	// valst 的状态（即读取参数）。
+
 	m_buf[n + m] = '\n';
 	m_buf[n + m + 1] = '\0';
 	log_str = m_buf;
 
 	m_mutex.unlock();
 
-	if (m_is_async && !m_log_queue->full())
+	if (m_is_async &&
+		!m_log_queue->full())  // 如果是异步日志模式（m_is_async == true），并且日志队列没满 →
+							   // 把日志字符串 push 到队列里。后台线程会从队列里取出日志并写文件。
 	{
 		m_log_queue->push(log_str);
 	}
-	else
+	else  // 否则（同步模式或队列满了），直接写入文件 m_fp。
 	{
 		m_mutex.lock();
-		fputs(log_str.c_str(), m_fp);
+		fputs(log_str.c_str(), m_fp);  // 把内容放到m_fp的系统提供的缓冲区
 		m_mutex.unlock();
 	}
 
-	va_end(valst);
+	va_end(valst);	// 清理 va_list，告诉编译器参数访问已经结束。
+					// 释放/清理与 valst 相关的内部状态（对某些实现是必须的）
 }
 
 void Log::flush(void)
 {
 	m_mutex.lock();
 	// 强制刷新写入流缓冲区
-	fflush(m_fp);
+	fflush(m_fp);  // 强制把文件流 m_fp 的缓冲区（系统提供的，不是m_buff)内容立刻写到文件中。
 	m_mutex.unlock();
 }
