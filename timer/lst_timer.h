@@ -72,13 +72,13 @@ class sort_timer_lst  // 实现一个定时器列表，这个列表是按定时�
 	void del_timer(util_timer *timer);	// 删除指定的定时器
 
 	void
-	tick();	 // 通常用于定时器轮询，它会检查定时器列表中所有定时器是否已过期，并且如果有定时器过期了，就执行相应的回调函数或者删除过期的定时器。
+	tick();	 // 用于定时器轮询，它会检查定时器列表中所有定时器是否已过期，并且如果有定时器过期了，就执行相应的回调函数或者删除过期的定时器。
 
    private:
 	void add_timer(util_timer *timer, util_timer *lst_head);
 
-	util_timer *head;
-	util_timer *tail;
+	util_timer *head;  // 定时器列表的头
+	util_timer *tail;  // 定时器列表的尾
 };
 
 class Utils
@@ -91,15 +91,28 @@ class Utils
 
 	// 对文件描述符设置非阻塞
 	int setnonblocking(int fd);
+	// 非阻塞模式意味着如果当前没有数据可读，或者当前不能执行某个操作，系统调用不会被阻塞，函数会立刻返回一个错误（例如
+	// EAGAIN）。这在高并发网络编程中很有用，避免了程序在等待某个操作时被阻塞。
 
 	// 将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
 	void addfd(int epollfd, int fd, bool one_shot, int TRIGMode);
+	// 用于将文件描述符 fd 添加到 epoll 实例 epollfd 中，并设置监听的事件类型。参数说明：
+	// epollfd：epoll 实例的文件描述符。
+	// fd：需要添加到 epoll 监听的文件描述符，通常是一个网络连接的套接字。
+	// one_shot：是否启用 EPOLLONESHOT。如果为 true，意味着一次性事件触发后该事件会自动从
+	// epoll中移除，避免事件重复触发。
+	// TRIGMode：触发模式，通常表示事件的工作模式，例如是否采用边缘触发（ET）模式。
 
 	// 信号处理函数
 	static void sig_handler(int sig);
 
 	// 设置信号函数
 	void addsig(int sig, void(handler)(int), bool restart = true);
+	// 通过调用这个函数，可以将一个信号（sig）与信号处理函数（handler）绑定。
+	// sig：要处理的信号（如 SIGALRM、SIGINT 等）。
+	// handler：信号发生时调用的处理函数，void(handler)(int) 表示一个接收 int
+	// 参数并返回void的函数指针。
+	// restart：默认为true，表示是否在处理信号后重启系统调用，通常用来处理阻塞的系统调用。
 
 	// 定时处理任务，重新定时以不断触发SIGALRM信号
 	void timer_handler();
@@ -107,10 +120,17 @@ class Utils
 	void show_error(int connfd, const char *info);
 
    public:
-	static int *u_pipefd;
-	sort_timer_lst m_timer_lst;
-	static int u_epollfd;
-	int m_TIMESLOT;
+	static int *
+		u_pipefd;  // 用于保存管道的文件描述符。在高并发程序中，管道通常用来进行进程间通信，或将信号传递到主程序或事件循环中。
+
+	sort_timer_lst m_timer_lst;	 // 升序的定时器链表
+
+	static int
+		u_epollfd;	// 保存 epoll
+					// 实例的文件描述符。程序通过该文件描述符来管理和监听多个文件描述符（如套接字）的事件。通常在事件驱动的网络服务器中，u_epollfd
+					// 被用来通过 epoll 实现高效的 I/O 多路复用。
+
+	int m_TIMESLOT;	 // 定时器的时间间隔
 };
 
 void cb_func(client_data *user_data);
