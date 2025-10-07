@@ -70,20 +70,20 @@ MYSQL *connection_pool::GetConnection()
 {
 	MYSQL *con = NULL;
 
-	if (0 == connList.size()) return NULL;
+	if (0 == connList.size()) return NULL;	// 链接池中没有空闲
 
-	reserve.wait();
+	reserve.wait();	 // 将信号量减一
 
-	lock.lock();
+	lock.lock();  // 互斥锁
 
-	con = connList.front();
+	con = connList.front();	 // 获取一个连接
 	connList.pop_front();
 
-	--m_FreeConn;
-	++m_CurConn;
+	--m_FreeConn;  // 可用的连接数减一
+	++m_CurConn;   // 当前的总连接数加一
 
-	lock.unlock();
-	return con;
+	lock.unlock();	// 互斥锁释放
+	return con;		// 返回得到的连接
 }
 
 // 释放当前使用的连接
