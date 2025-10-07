@@ -89,17 +89,17 @@ MYSQL *connection_pool::GetConnection()
 // 释放当前使用的连接
 bool connection_pool::ReleaseConnection(MYSQL *con)
 {
-	if (NULL == con) return false;
+	if (NULL == con) return false;	// 如果要释放的连接已经为空，那么显示失败
 
-	lock.lock();
+	lock.lock();  // 加互斥锁
 
-	connList.push_back(con);
+	connList.push_back(con);  // 向链表中添加释放出来的连接
 	++m_FreeConn;
 	--m_CurConn;
 
-	lock.unlock();
+	lock.unlock();	// 归还互斥锁
 
-	reserve.post();
+	reserve.post();	 // 信号量加一，如果有在wait的，wait会将信号量减一并唤醒
 	return true;
 }
 
