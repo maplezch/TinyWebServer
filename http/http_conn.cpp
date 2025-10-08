@@ -300,30 +300,45 @@ bool http_conn::read_once()
 // 解析http请求行，获得请求方法，目标url及http版本号
 http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 {
-	m_url = strpbrk(text, " \t");
-	if (!m_url)
+	m_url = strpbrk(text, " \t");  // 在请求行中查找第一个空格或制表符（\t），返回其指针。
+
+	if (!m_url)	 // 如果没有找到，则请求不合法
 	{
 		return BAD_REQUEST;
 	}
+
 	*m_url++ = '\0';
+	// 把第一个空格改成字符串结束符 '\0'，此时：
+	// text 变成 "GET"
+	// m_url 指向 "/index.html HTTP/1.1"
+
 	char *method = text;
-	if (strcasecmp(method, "GET") == 0)
+
+	if (strcasecmp(method, "GET") == 0)	 // strcasecmp：忽略大小写比较字符串。
 		m_method = GET;
 	else if (strcasecmp(method, "POST") == 0)
 	{
 		m_method = POST;
-		cgi = 1;
+
+		cgi = 1;  // 表示该请求会涉及到动态内容处理
 	}
 	else
-		return BAD_REQUEST;
-	m_url += strspn(m_url, " \t");
+		return BAD_REQUEST;	 // 其它均被视为不合法的请求
+
+	m_url += strspn(m_url, " \t");	// 清除多余的分隔符
+	// strspn(m_url, " \t") 计算开头连续空格或制表符的数量；
+
 	m_version = strpbrk(m_url, " \t");
-	if (!m_version) return BAD_REQUEST;
-	*m_version++ = '\0';
-	m_version += strspn(m_version, " \t");
-	if (strcasecmp(m_version, "HTTP/1.1") != 0) return BAD_REQUEST;
-	if (strncasecmp(m_url, "http://", 7) == 0)
-	{
+
+	if (!m_version) return BAD_REQUEST;	 // 没有version，非法请求
+
+	*m_version++ = '\0';					// 拆出 URL 与 HTTP 版本号
+	m_version += strspn(m_version, " \t");	// 清除多余的分隔符
+
+	if (strcasecmp(m_version, "HTTP/1.1") != 0) return BAD_REQUEST;	 // 只接受HTTP/1.1版本
+
+	if (strncasecmp(m_url, "http://", 7) == 0)	// 去掉http://头
+	{											// 在比较字符串时忽略大小写，最多比较前7个字符。
 		m_url += 7;
 		m_url = strchr(m_url, '/');
 	}
@@ -332,12 +347,20 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 	{
 		m_url += 8;
 		m_url = strchr(m_url, '/');
+		// 查找指定字符在字符串中的第一次出现位置，返回指针
 	}
 
-	if (!m_url || m_url[0] != '/') return BAD_REQUEST;
+	if (!m_url || m_url[0] != '/') return BAD_REQUEST;	// 没找到
+
 	// 当url为/时，显示判断界面
 	if (strlen(m_url) == 1) strcat(m_url, "judge.html");
-	m_check_state = CHECK_STATE_HEADER;
+	// 字符串连接函数，用于将一个字符串附加到另一个字符串的末尾。
+	// 如果只是单个斜杠 /，说明请求根目录，则默认跳转到 judge.html；
+	// （即访问主页时显示默认页面）
+
+	m_check_state =
+		CHECK_STATE_HEADER;	 // 将解析状态机的状态改为 CHECK_STATE_HEADER（进入“解析请求头”阶段）
+
 	return NO_REQUEST;
 }
 
