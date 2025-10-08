@@ -96,6 +96,7 @@ void modfd(int epollfd, int fd, int ev, int TRIGMode)
 		event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
 
 	epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
+	// EPOLL_CTL_MOD 表示修改操作。此时，epoll_ctl 将更新 fd 在 epollfd 中的监听事件为新的 event。
 }
 
 int http_conn::m_user_count = 0;
@@ -103,7 +104,7 @@ int http_conn::m_epollfd = -1;
 
 // 关闭连接，关闭一个连接，客户总量减一
 void http_conn::close_conn(bool real_close)
-{
+{  // 此处将real_close认为是预留接口（当前的代码似乎没有区分真假关闭）
 	if (real_close && (m_sockfd != -1))
 	{
 		printf("close %d\n", m_sockfd);
