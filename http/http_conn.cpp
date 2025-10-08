@@ -118,16 +118,21 @@ void http_conn::close_conn(bool real_close)
 void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMode, int close_log,
 					 string user, string passwd, string sqlname)
 {
-	m_sockfd = sockfd;
-	m_address = addr;
+	m_sockfd = sockfd;	// 套接字描述符
+	m_address = addr;	// 客户端地址
 
-	addfd(m_epollfd, sockfd, true, m_TRIGMode);
-	m_user_count++;
+	addfd(m_epollfd, sockfd, true,
+		  m_TRIGMode);	// 将 sockfd（套接字）添加到 epoll 事件中，用于事件通知。
+
+	m_user_count++;	 // 连接的用户数量加一
 
 	// 当浏览器出现连接重置时，可能是网站根目录出错或http响应格式出错或者访问的文件中内容完全为空
-	doc_root = root;
-	m_TRIGMode = TRIGMode;
-	m_close_log = close_log;
+	doc_root = root;  // 设置网站的根目录路径。
+
+	m_TRIGMode =
+		TRIGMode;  // 设置触发模式，TRIGMode 传入的值用于设置如何处理事件，水平或者边缘触发……
+
+	m_close_log = close_log;  // 是否关闭日志
 
 	strcpy(sql_user, user.c_str());
 	strcpy(sql_passwd, passwd.c_str());
@@ -140,27 +145,51 @@ void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMo
 // check_state默认为分析请求行状态
 void http_conn::init()
 {
-	mysql = NULL;
+	mysql = NULL;  // 中断数据库连接
+
 	bytes_to_send = 0;
+
 	bytes_have_send = 0;
-	m_check_state = CHECK_STATE_REQUESTLINE;
-	m_linger = false;
-	m_method = GET;
+
+	m_check_state = CHECK_STATE_REQUESTLINE;  // 将解析状态机设置为 解析请求行（Request Line）
+											  // 状态。
+											  // HTTP 请求的解析通常分为几个阶段：
+											  // 请求行（Request Line）
+											  // 请求头（Request Header）
+											  // 请求体（Request Body）
+											  // 这里默认从第一阶段开始。
+
+	m_linger = false;  // 设置是否保持连接（即 Connection: keep-alive）为默认关闭。
+					   // 若客户端请求了 keep - alive，后续解析时会改成 true。
+
+	m_method = GET;	 // 设置默认请求方法为 GET。
+
 	m_url = 0;
 	m_version = 0;
 	m_content_length = 0;
 	m_host = 0;
-	m_start_line = 0;
-	m_checked_idx = 0;
-	m_read_idx = 0;
-	m_write_idx = 0;
-	cgi = 0;
-	m_state = 0;
-	timer_flag = 0;
-	improv = 0;
 
+	m_start_line = 0;  // 正在解析的行的起始位置
+
+	m_checked_idx = 0;
+
+	m_read_idx = 0;
+
+	m_write_idx = 0;
+
+	cgi = 0;
+
+	m_state = 0;
+
+	timer_flag = 0;
+
+	improv = 0;	 // 改进标志位（常用于同步或线程池通信时标记该连接的处理进展）
+
+	// 清空缓冲区
 	memset(m_read_buf, '\0', READ_BUFFER_SIZE);
 	memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
+
+	// 清空文件路径
 	memset(m_real_file, '\0', FILENAME_LEN);
 }
 
@@ -168,50 +197,71 @@ void http_conn::init()
 // 返回值为行的读取状态，有LINE_OK,LINE_BAD,LINE_OPEN
 http_conn::LINE_STATUS http_conn::parse_line()
 {
+	// m_read_buf	读取缓冲区，保存从 socket 读来的 HTTP 请求数据
+	// m_read_idx 当前已读入缓冲区的字节总数
+	// m_checked_idx 当前正在检查的下标（即解析进度）
+
 	char temp;
-	for (; m_checked_idx < m_read_idx; ++m_checked_idx)
+	for (; m_checked_idx < m_read_idx;
+		 ++m_checked_idx)  // 读入的字节数比已经检查过的字节数多，则继续检查
 	{
-		temp = m_read_buf[m_checked_idx];
-		if (temp == '\r')
+		temp = m_read_buf[m_checked_idx];  // 取出要检查的字节
+
+		if (temp == '\r')  // 当前为'\r'
 		{
-			if ((m_checked_idx + 1) == m_read_idx)
+			if ((m_checked_idx + 1) ==
+				m_read_idx)	 // 一个是下标，一个是长度。此处为后面的内容还没有读入
 				return LINE_OPEN;
-			else if (m_read_buf[m_checked_idx + 1] == '\n')
-			{
-				m_read_buf[m_checked_idx++] = '\0';
-				m_read_buf[m_checked_idx++] = '\0';
-				return LINE_OK;
+			else if (m_read_buf[m_checked_idx + 1] == '\n')	 // 下一个为'\n'
+			{												 //'\r\n'组成http报文的行结尾
+				m_read_buf[m_checked_idx++] = '\0';			 // 将'\r'替换为'\0'
+				m_read_buf[m_checked_idx++] = '\0';			 // 将'\n'替换为'\0'
+
+				return LINE_OK;	 // 行解析完成
 			}
+
 			return LINE_BAD;
 		}
-		else if (temp == '\n')
+		else if (temp == '\n')	// 当前字节为'\n'
 		{
-			if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
-			{
+			if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')	 // 前一个字节是'\r'
+			{  //'\r\n'组成http报文的行结尾
+
 				m_read_buf[m_checked_idx - 1] = '\0';
 				m_read_buf[m_checked_idx++] = '\0';
+
 				return LINE_OK;
 			}
-			return LINE_BAD;
+
+			return LINE_BAD;  // 其它情况都是语法错误
 		}
 	}
-	return LINE_OPEN;
+
+	return LINE_OPEN;  // 全部检查完了都没有\r\n，说明这一行没有读完，仍然在处理中
 }
 
 // 循环读取客户数据，直到无数据可读或对方关闭连接
 // 非阻塞ET工作模式下，需要一次性将数据读完
 bool http_conn::read_once()
 {
-	if (m_read_idx >= READ_BUFFER_SIZE)
+	if (m_read_idx >= READ_BUFFER_SIZE)	 // 缓冲区没有空间，直接返回false
 	{
 		return false;
 	}
+
 	int bytes_read = 0;
 
 	// LT读取数据
 	if (0 == m_TRIGMode)
 	{
 		bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+		// 返回类型 ssize_t：≥0 表示读到的字节数；0 表示对端已正常关闭连接；-1 表示出错并设置 errno
+		// m_sockfd —— socket 文件描述符（要从哪个连接读数据）。
+		// m_read_buf +m_read_idx —— 写入缓冲区的起始地址（从 m_read_buf 的第 m_read_idx
+		// 个字节开始写）。 READ_BUFFER_SIZE -m_read_idx ——
+		// 能写入的最大字节数（缓冲区剩余容量）。保证不会越界写入。
+		// 0 —— flags 为 0，表示使用默认行为（不传特殊标志）。
+
 		m_read_idx += bytes_read;
 
 		if (bytes_read <= 0)
@@ -227,15 +277,20 @@ bool http_conn::read_once()
 		while (true)
 		{
 			bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
-			if (bytes_read == -1)
+
+			if (bytes_read == -1)  // 返回-1代表读取失败
 			{
 				if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+				// EAGAIN	“资源暂时不可用”	读操作时，当前没有数据可读（非阻塞模式）
+				// EWOULDBLOCK	“如果继续操作，会阻塞当前调用” 行为与 EAGAIN 相同
+
 				return false;
 			}
-			else if (bytes_read == 0)
+			else if (bytes_read == 0)  // 返回 0 表示 对方关闭了连接（TCP FIN）
 			{
 				return false;
 			}
+
 			m_read_idx += bytes_read;
 		}
 		return true;
