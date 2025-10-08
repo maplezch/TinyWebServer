@@ -283,20 +283,32 @@ void Utils::addsig(int sig, void(handler)(int), bool restart)
 // 定时处理任务，重新定时以不断触发SIGALRM信号
 void Utils::timer_handler()
 {
-	m_timer_lst.tick();
-	alarm(m_TIMESLOT);
+	m_timer_lst.tick();	 // 处理列表中的定时器
+	alarm(m_TIMESLOT);	 // alarm() 是一个标准的 Unix
+						 // 系统调用，用于设置一个定时器，使得在指定的秒数后触发 SIGALRM 信号。
+	// m_TIMESLOT 是一个定时器时间间隔，通常表示信号触发的频率（单位是秒）。例如，m_TIMESLOT
+	// 的值可能是 1，表示每隔 1 秒就会触发一次 SIGALRM 信号。
+	// alarm() 设置了一个定时器，当定时器倒计时结束时，系统会向当前进程发送
+	// SIGALRM 信号，从而触发对应的信号处理函数。
 }
 
 void Utils::show_error(int connfd, const char *info)
-{
+{  // connfd: 这是一个套接字描述符，表示与客户端的连接。
+
 	send(connfd, info, strlen(info), 0);
+	// send 函数会将 info 中的错误信息发送到通过 connfd 连接的客户端。
+	// strlen(info) 表示要发送的信息的长度。
+	// 0 表示没有特殊标志，普通的发送操作。
+
 	close(connfd);
+	// 发送完错误信息后，调用 close
+	// 关闭与客户端的连接。这个操作释放了文件描述符，断开了与客户端的通信。
 }
 
 int *Utils::u_pipefd = 0;
 int Utils::u_epollfd = 0;
 
-class Utils;
+class Utils;  // 前向声明，避免循环引用
 
 void cb_func(client_data *user_data)  // 回调函数，处理定时器超时的情况
 {

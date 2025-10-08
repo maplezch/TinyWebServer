@@ -130,7 +130,7 @@ class Utils
 					// 实例的文件描述符。程序通过该文件描述符来管理和监听多个文件描述符（如套接字）的事件。通常在事件驱动的网络服务器中，u_epollfd
 					// 被用来通过 epoll 实现高效的 I/O 多路复用。
 
-	int m_TIMESLOT;	 // 定时器的时间间隔
+	int m_TIMESLOT;	 // 周期性处理定时器列表的时间间隔
 };
 
 void cb_func(client_data *user_data);
