@@ -818,9 +818,14 @@ bool http_conn::add_response(const char *format, ...)
 	return true;
 }
 
-bool http_conn::add_status_line(int status, const char *title)
+bool http_conn::add_status_line(int status,
+								const char *title)	// 将 HTTP 响应的 状态行 添加到响应缓冲区中。
 {
-	return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
+	// status：表示 HTTP 状态码（例如 200、404、500 等）。
+	// title：表示与状态码相关的状态描述文字（例如"OK"、"Not Found"、"Internal Server Error" 等）。
+
+	return add_response("%s %d %s\r\n", "HTTP/1.1", status,
+						title);	 // 将格式化后的状态行添加到响应缓冲区
 }
 
 bool http_conn::add_headers(int content_len)
