@@ -189,7 +189,7 @@ class http_conn
 	// CGI 是一种标准，允许 Web 服务器与外部应用程序（如脚本）进行交互。当服务器接收到一个 POST
 	// 请求时，CGI 会根据请求的内容，调用相应的脚本（如 PHP、Python、Perl 等）来处理请求并生成响应。
 
-	char *m_string;	 // 存储请求头数据
+	char *m_string;	 // 存储请求体数据
 
 	int bytes_to_send;	// 要发送的数据大小
 

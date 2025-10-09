@@ -367,17 +367,19 @@ http_conn::HTTP_CODE http_conn::parse_request_line(char *text)
 // 解析http请求的一个头部信息
 http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 {
-	if (text[0] == '\0')
+	if (text[0] == '\0')  // 当前行是空行
 	{
-		if (m_content_length != 0)
+		if (m_content_length != 0)	// 存在请求体
 		{
 			m_check_state = CHECK_STATE_CONTENT;
-			return NO_REQUEST;
+
+			return NO_REQUEST;	// 表示请求报文没有解析完
 		}
-		return GET_REQUEST;
+
+		return GET_REQUEST;	 // 不存在请求体，遇到空行则代表完成了请求头的解析（请求报文解析完成）
 	}
 	else if (strncasecmp(text, "Connection:", 11) == 0)
-	{
+	{  // 解析的行为头的连接信息（是否持续连接）
 		text += 11;
 		text += strspn(text, " \t");
 		if (strcasecmp(text, "keep-alive") == 0)
@@ -386,22 +388,25 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 		}
 	}
 	else if (strncasecmp(text, "Content-length:", 15) == 0)
-	{
+	{  // 解析请求体长度
 		text += 15;
 		text += strspn(text, " \t");
 		m_content_length = atol(text);
+		// atol() 会从字符串 str
+		// 的开头开始读取，跳过空格等空白符，然后把连续的数字字符解析为一个长整数（long），直到遇到第一个非数字字符为止。
 	}
 	else if (strncasecmp(text, "Host:", 5) == 0)
-	{
+	{  // 解析主机行（服务器域名）
 		text += 5;
 		text += strspn(text, " \t");
 		m_host = text;
 	}
 	else
 	{
-		LOG_INFO("oop!unknow header: %s", text);
+		LOG_INFO("oop!unknow header: %s", text);  // 其他行不解析
 	}
-	return NO_REQUEST;
+
+	return NO_REQUEST;	// 不是空行则代表未解析完成，状态为继续解析
 }
 
 // 判断http请求是否被完整读入
@@ -409,12 +414,19 @@ http_conn::HTTP_CODE http_conn::parse_content(char *text)
 {
 	if (m_read_idx >= (m_content_length + m_checked_idx))
 	{
+		// m_read_idx：当前总共读入的字节数（包括请求行、头部和内容）。
+		// m_checked_idx：已经解析过的部分的末尾位置（一般在请求头结束处）。
+		// m_content_length：请求体的长度（从头部字段 Content -Length : 得到）。
+
 		text[m_content_length] = '\0';
+
 		// POST请求中最后为输入的用户名和密码
 		m_string = text;
-		return GET_REQUEST;
+
+		return GET_REQUEST;	 // 完成请求报文的解析，变更状态
 	}
-	return NO_REQUEST;
+
+	return NO_REQUEST;	// 其它情况均为未读取完
 }
 
 http_conn::HTTP_CODE http_conn::process_read()
