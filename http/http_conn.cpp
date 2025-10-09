@@ -660,42 +660,71 @@ http_conn::HTTP_CODE http_conn::do_request()
 	return FILE_REQUEST;
 }
 
-void http_conn::unmap()
+void http_conn::unmap()	 // 解除对映射文件的映射关系
 {
-	if (m_file_address)
+	if (m_file_address)	 // 映射地址存在
 	{
-		munmap(m_file_address, m_file_stat.st_size);
+		munmap(m_file_address,
+			   m_file_stat.st_size);  // 使用 munmap 函数解除文件映射，传入文件的地址和大小
+
 		m_file_address = 0;
 	}
 }
+
 bool http_conn::write()
 {
 	int temp = 0;
 
-	if (bytes_to_send == 0)
+	if (bytes_to_send == 0)	 // 没有字节需要发送
 	{
-		modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
-		init();
+		// 该操作代表数据传输完毕，事件从写入转换为读取
+		modfd(m_epollfd, m_sockfd, EPOLLIN,
+			  m_TRIGMode);	// 修改 epoll 中的文件描述符 m_sockfd 的事件监听类型。
+		// EPOLLIN 是 epoll 监听的事件之一，表示“可读事件”。即当套接字 m_sockfd
+		// 上有数据可读时，epoll 会通知程序。
+		// 这个标志用于告诉 epoll 监听 m_sockfd 上的数据读取操作。
+		// m_TRIGMode 是一个用于表示触发模式的标志
+
+		init();	 // 初始化成员函数
+
 		return true;
 	}
 
 	while (1)
 	{
 		temp = writev(m_sockfd, m_iv, m_iv_count);
+		// 使用 writev 函数将 m_iv 中的数据（一个由多个缓冲区组成的数组）写入
+		// m_sockfd，即通过套接字发送响应。m_iv_count 是 iov 数组的元素个数。
 
-		if (temp < 0)
+		// 成功时返回的字节数（ssize_t）：
+		// 如果 writev
+		// 成功，它会返回实际写入的字节数（ssize_t类型），即它成功写入的总字节数。这可能少于缓冲区的总大小，因为实际写入的字节数取决于操作系统的可用缓冲区和目标套接字的状态。
+		// 如果有多个缓冲区（即 iovcnt
+		// >1），它会返回成功写入的总字节数。比如，如果有两个缓冲区，每个缓冲区有 100
+		// 字节要写入，但实际写入了 150 字节，它会返回 150。 失败时返回
+		// -1：如果写操作失败（比如套接字不可用、发生 I /O 错误等），writev 会返回 -1。此时，errno
+		// 会被设置为相应的错误码，表示错误的原因。例如，EAGAIN表示资源暂时不可用，需要稍后重试。
+
+		if (temp < 0)  // writev操作失败
 		{
-			if (errno == EAGAIN)
+			if (errno == EAGAIN)  // 当前无法进行写操作
 			{
-				modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+				modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);  // 修改监听事件
+				// 将事件从读事件转换为写事件，即在可以写的时候触发事件
+
 				return true;
 			}
-			unmap();
-			return false;
+
+			// 其它错误
+			unmap();  // 取消文件内存映射
+
+			return false;  // 返回失败
 		}
 
+		// 维护已经发送的和将要发送的字节数
 		bytes_have_send += temp;
 		bytes_to_send -= temp;
+
 		if (bytes_have_send >= m_iv[0].iov_len)
 		{
 			m_iv[0].iov_len = 0;
@@ -725,6 +754,7 @@ bool http_conn::write()
 		}
 	}
 }
+
 bool http_conn::add_response(const char *format, ...)
 {
 	if (m_write_idx >= WRITE_BUFFER_SIZE) return false;
