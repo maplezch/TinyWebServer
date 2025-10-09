@@ -434,52 +434,73 @@ http_conn::HTTP_CODE http_conn::process_read()
 	LINE_STATUS line_status = LINE_OK;
 	HTTP_CODE ret = NO_REQUEST;
 	char *text = 0;
+	// LINE_STATUS：行解析的状态（可能是 LINE_OK, LINE_BAD, LINE_OPEN），由 parse_line()
+	// 返回，用于检测一行是否完整。
+	// HTTP_CODE：HTTP请求整体解析状态。
+	// text：指向当前解析到的一行字符串（请求行或请求头等）。
 
 	while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) ||
 		   ((line_status = parse_line()) == LINE_OK))
 	{
-		text = get_line();
+		text = get_line();	// 一次解析一行
+
 		m_start_line = m_checked_idx;
-		LOG_INFO("%s", text);
-		switch (m_check_state)
+
+		LOG_INFO("%s", text);  // 打印日志
+
+		switch (m_check_state)	// 根据解析的内容跳转到不同的解析函数
 		{
-			case CHECK_STATE_REQUESTLINE:
+			case CHECK_STATE_REQUESTLINE:  // 解析请求行
 			{
 				ret = parse_request_line(text);
+
 				if (ret == BAD_REQUEST) return BAD_REQUEST;
+
 				break;
 			}
-			case CHECK_STATE_HEADER:
+			case CHECK_STATE_HEADER:  // 解析请求头
 			{
 				ret = parse_headers(text);
+
 				if (ret == BAD_REQUEST)
 					return BAD_REQUEST;
 				else if (ret == GET_REQUEST)
 				{
 					return do_request();
 				}
+
 				break;
 			}
-			case CHECK_STATE_CONTENT:
+			case CHECK_STATE_CONTENT:  // 解析请求体
 			{
 				ret = parse_content(text);
+
 				if (ret == GET_REQUEST) return do_request();
-				line_status = LINE_OPEN;
+
+				line_status =
+					LINE_OPEN;	// 此时代表请求体未解析完成
+								// line_status =
+								// LINE_OPEN会导致while循环终止，这代表请求报文没有完全被收到，应该等待内容被完整收到以后再进行解析
+
 				break;
 			}
 			default:
-				return INTERNAL_ERROR;
+				return INTERNAL_ERROR;	// 其它情况属于内部错误
 		}
 	}
-	return NO_REQUEST;
+
+	return NO_REQUEST;	// 其它终止情况均为未解析完成
 }
 
 http_conn::HTTP_CODE http_conn::do_request()
 {
-	strcpy(m_real_file, doc_root);
+	strcpy(m_real_file, doc_root);	// 将文档根目录（doc_root）复制到 m_real_file
+
 	int len = strlen(doc_root);
+
 	// printf("m_url:%s\n", m_url);
-	const char *p = strrchr(m_url, '/');
+
+	const char *p = strrchr(m_url, '/');  // 查找 URL 中最后一个 / 的位置
 
 	// 处理cgi
 	if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
@@ -488,27 +509,39 @@ http_conn::HTTP_CODE http_conn::do_request()
 		char flag = m_url[1];
 
 		char *m_url_real = (char *) malloc(sizeof(char) * 200);
+
 		strcpy(m_url_real, "/");
+
 		strcat(m_url_real, m_url + 2);
+
 		strncpy(m_real_file + len, m_url_real, FILENAME_LEN - len - 1);
-		free(m_url_real);
+		// strncpy 用来将 m_url_real 的内容复制到 m_real_file 中。m_real_file + len 表示从
+		// m_real_file 中的 len 位置开始写入数据，防止覆盖掉原来的数据。
+		// FILENAME_LEN - len -1 是限制复制的字符数，确保不会超过 m_real_file
+		// 的最大长度，并留出空间来存储字符串的结束符（\0）。
+
+		free(m_url_real);  // 释放申请的空间
 
 		// 将用户名和密码提取出来
 		// user=123&passwd=123
 		char name[100], password[100];
+
 		int i;
-		for (i = 5; m_string[i] != '&'; ++i) name[i - 5] = m_string[i];
+		for (i = 5; m_string[i] != '&'; ++i) name[i - 5] = m_string[i];	 // 提取出用户名
 		name[i - 5] = '\0';
 
 		int j = 0;
-		for (i = i + 10; m_string[i] != '\0'; ++i, ++j) password[j] = m_string[i];
+		for (i = i + 10; m_string[i] != '\0'; ++i, ++j) password[j] = m_string[i];	// 提取出密码
 		password[j] = '\0';
 
 		if (*(p + 1) == '3')
 		{
 			// 如果是注册，先检测数据库中是否有重名的
 			// 没有重名的，进行增加数据
+
 			char *sql_insert = (char *) malloc(sizeof(char) * 200);
+
+			// sql语句
 			strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
 			strcat(sql_insert, "'");
 			strcat(sql_insert, name);
@@ -516,19 +549,25 @@ http_conn::HTTP_CODE http_conn::do_request()
 			strcat(sql_insert, password);
 			strcat(sql_insert, "')");
 
-			if (users.find(name) == users.end())
-			{
-				m_lock.lock();
-				int res = mysql_query(mysql, sql_insert);
-				users.insert(pair<string, string>(name, password));
-				m_lock.unlock();
+			if (users.find(name) == users.end())  // 查找是否存在重名
+			{									  // 不存在重名，进行注册
+				m_lock.lock();					  // 互斥锁
 
+				int res = mysql_query(mysql, sql_insert);  // 执行sql插入
+				// 返回值为 0：表示查询成功执行，没有错误。
+				// 返回值非 0：表示查询执行失败，具体的错误信息可以通过 mysql_error(mysql) 获取。
+
+				users.insert(pair<string, string>(name, password));	 // 插入到映射表
+
+				m_lock.unlock();  // 解除互斥锁
+
+				// 按照是否出错重定向url
 				if (!res)
 					strcpy(m_url, "/log.html");
 				else
 					strcpy(m_url, "/registerError.html");
 			}
-			else
+			else  // 存在重名
 				strcpy(m_url, "/registerError.html");
 		}
 		// 如果是登录，直接判断
@@ -542,60 +581,85 @@ http_conn::HTTP_CODE http_conn::do_request()
 		}
 	}
 
-	if (*(p + 1) == '0')
+	if (*(p + 1) == '0')  // 注册页面
 	{
 		char *m_url_real = (char *) malloc(sizeof(char) * 200);
+
+		// 跳转到注册页面，根目录+注册页面构成完整的路径
 		strcpy(m_url_real, "/register.html");
 		strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
 		free(m_url_real);
 	}
-	else if (*(p + 1) == '1')
+	else if (*(p + 1) == '1')  // 登录页面
 	{
 		char *m_url_real = (char *) malloc(sizeof(char) * 200);
+
 		strcpy(m_url_real, "/log.html");
 		strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
 		free(m_url_real);
 	}
-	else if (*(p + 1) == '5')
+	else if (*(p + 1) == '5')  // 图片页面
 	{
 		char *m_url_real = (char *) malloc(sizeof(char) * 200);
+
 		strcpy(m_url_real, "/picture.html");
 		strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
 		free(m_url_real);
 	}
-	else if (*(p + 1) == '6')
+	else if (*(p + 1) == '6')  // 视频页面
 	{
 		char *m_url_real = (char *) malloc(sizeof(char) * 200);
+
 		strcpy(m_url_real, "/video.html");
 		strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
 		free(m_url_real);
 	}
-	else if (*(p + 1) == '7')
+	else if (*(p + 1) == '7')  // 粉丝页面
 	{
 		char *m_url_real = (char *) malloc(sizeof(char) * 200);
+
 		strcpy(m_url_real, "/fans.html");
 		strncpy(m_real_file + len, m_url_real, strlen(m_url_real));
 
 		free(m_url_real);
 	}
-	else
+	else  // 其它页面
 		strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
 
-	if (stat(m_real_file, &m_file_stat) < 0) return NO_RESOURCE;
+	if (stat(m_real_file, &m_file_stat) < 0)
+		return NO_RESOURCE;	 // stat 系统调用检查请求的文件是否存在、是否可读、以及是否为目录。
+	// 它将文件的元数据（如大小、权限、类型等）存储在 m_file_stat 结构中。如果 stat 返回值小于
+	// 0，表示文件不存在或者无法访问。
 
 	if (!(m_file_stat.st_mode & S_IROTH)) return FORBIDDEN_REQUEST;
+	// m_file_stat.st_mode 包含文件的权限信息。通过位操作 &
+	// 检查文件的权限是否包含对其他用户（S_IROTH）的读取权限。如果没有读取权限，返回
+	// FORBIDDEN_REQUEST，表示权限不足，拒绝访问。
 
 	if (S_ISDIR(m_file_stat.st_mode)) return BAD_REQUEST;
+	// 用于判断文件是否是一个目录。如果是目录，返回
+	// BAD_REQUEST，表示请求错误，因为请求的资源不应该是一个目录。
 
 	int fd = open(m_real_file, O_RDONLY);
+
 	m_file_address = (char *) mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	close(fd);
+	// mmap 将文件映射到内存中，m_file_stat.st_size
+	// 是文件的大小。该文件内容将被映射到内存中的一个区域，供程序读取。这里使用了以下参数：
+	// 0：表示让操作系统自动选择映射区域的地址。
+	// PROT_READ：表示映射区域的权限为只读。
+	// MAP_PRIVATE：表示映射区域是私有的，修改映射区域的内容不会影响原文件。
+	// fd：文件描述符，指定要映射的文件。
+	// 0：偏移量，通常设为 0，表示从文件开头开始映射。
+	// 如果 mmap 调用成功，文件的内容将被加载到内存中，m_file_address 指向该内存区域。
+
 	return FILE_REQUEST;
 }
+
 void http_conn::unmap()
 {
 	if (m_file_address)

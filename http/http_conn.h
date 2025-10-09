@@ -172,7 +172,7 @@ class http_conn
 
 	bool m_linger;	// 是否保持连接
 
-	char *m_file_address;  // 文件的地址
+	char *m_file_address;  // 文件映射到的内存地址（手动设置mmap）
 
 	struct stat m_file_stat;  // 文件状态信息
 
