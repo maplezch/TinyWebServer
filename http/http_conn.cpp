@@ -762,51 +762,97 @@ bool http_conn::write()
 
 bool http_conn::add_response(const char *format, ...)
 {
-	if (m_write_idx >= WRITE_BUFFER_SIZE) return false;
+	if (m_write_idx >= WRITE_BUFFER_SIZE) return false;	 // 检查缓冲区大小是否足够
+
+	// 使用了 C 标准库中的变长参数功能（va_list），初始化一个 arg_list 来访问后续的可变参数。format
+	// 是第一个参数，它是格式化字符串。
 	va_list arg_list;
+	// va_list 是 C
+	// 标准库提供的一个类型，用于保存变长参数的处理信息。它类似于一个指针，指向传入的变长参数的内存位置。
+	// 在这行代码中，arg_list 是一个变量，声明为类型 va_list，用于存储参数列表的状态。
+
 	va_start(arg_list, format);
+	// va_start 是一个宏，用于初始化一个 va_list 类型的变量（在这里是 arg_list）。它的作用是使得
+	// arg_list 可以正确地访问函数的变长参数。
+	// va_start 宏的第一个参数是一个 va_list
+	// 变量（在这里是arg_list），第二个参数是函数的最后一个固定参数（在这里是format）。该宏的作用是找到变长参数的起始位置，并使
+	// arg_list 指向变长参数的第一个参数。
+
+	// 在使用变长参数时，format
+	// 参数通常用作“格式控制符”，它指定了如何解释后续的变长参数。也就是说，format
+	// 作为一个固定参数，决定了后续的可变参数的类型、数量和如何格式化。
+
 	int len =
 		vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
+	// vsnprintf 函数根据 format 和 arg_list 中的参数，将格式化后的字符串写入到 m_write_buf
+	// 中。写入位置是 m_write_buf + m_write_idx，即从缓冲区当前的写入位置开始。写入的最大长度是
+	// WRITE_BUFFER_SIZE - 1 - m_write_idx，确保不会溢出。
+	// len值为实际写入的字节数
+
 	if (len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
-	{
+	{  // 实际写入的字符数）大于或等于剩余空间的大小，就表示写入的数据超出了缓冲区大小。这时，函数会调用
+	   // va_end(arg_list) 结束变长参数的处理，并返回 false。
+
 		va_end(arg_list);
+		// va_end 的作用是 释放变长参数访问时可能分配的资源，并通知编译器对 va_list 进行最后的清理。
+
+		/*
+		资源释放：在某些平台或编译器中，va_list
+		可能会分配动态资源，va_end会确保这些资源被正确释放。即使在某些平台上并不需要显式释放内存，调用
+		va_end也是一个规范，它确保了编译器的行为符合标准。避免潜在的错误：如果没有调用va_end，可能会导致未定义的行为，或者在多次调用变长参数函数时引发资源泄漏或错误。
+		*/
+
 		return false;
 	}
-	m_write_idx += len;
-	va_end(arg_list);
 
-	LOG_INFO("request:%s", m_write_buf);
+	m_write_idx += len;	 // 更新下一次的写入位置
+
+	va_end(arg_list);  // 结束变长数组的处理
+
+	LOG_INFO("request:%s",
+			 m_write_buf);	// 日志记录
+	// LOG_INFO是一个宏（或函数），它通常用于记录信息级别的日志。这个宏的具体实现会依赖于你使用的日志库或框架。
+	// LOG_INFO是一种日志级别，通常表示普通的、重要但不紧急的信息，比如请求的处理、状态更新等。一般情况下，它不会像ERROR
+	// 或 WARN 那样表示严重问题，而是简单的操作或数据记录。
 
 	return true;
 }
+
 bool http_conn::add_status_line(int status, const char *title)
 {
 	return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
 }
+
 bool http_conn::add_headers(int content_len)
 {
 	return add_content_length(content_len) && add_linger() && add_blank_line();
 }
+
 bool http_conn::add_content_length(int content_len)
 {
 	return add_response("Content-Length:%d\r\n", content_len);
 }
+
 bool http_conn::add_content_type()
 {
 	return add_response("Content-Type:%s\r\n", "text/html");
 }
+
 bool http_conn::add_linger()
 {
 	return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
 }
+
 bool http_conn::add_blank_line()
 {
 	return add_response("%s", "\r\n");
 }
+
 bool http_conn::add_content(const char *content)
 {
 	return add_response("%s", content);
 }
+
 bool http_conn::process_write(HTTP_CODE ret)
 {
 	switch (ret)
@@ -862,6 +908,7 @@ bool http_conn::process_write(HTTP_CODE ret)
 	bytes_to_send = m_write_idx;
 	return true;
 }
+
 void http_conn::process()
 {
 	HTTP_CODE read_ret = process_read();
