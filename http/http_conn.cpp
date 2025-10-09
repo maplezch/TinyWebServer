@@ -725,29 +725,34 @@ bool http_conn::write()
 		bytes_have_send += temp;
 		bytes_to_send -= temp;
 
-		if (bytes_have_send >= m_iv[0].iov_len)
+		if (bytes_have_send >=
+			m_iv[0]
+				.iov_len)  // 已经发送的字节数大于第一个缓冲区的字节数（第一个缓冲区已经发送完毕）
 		{
-			m_iv[0].iov_len = 0;
-			m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
-			m_iv[1].iov_len = bytes_to_send;
+			m_iv[0].iov_len = 0;  // 表示这个缓冲区的内容已经完全发送
+			m_iv[1].iov_base =
+				m_file_address + (bytes_have_send - m_write_idx);  // 确定需要写入的数据从哪里开始
+			m_iv[1].iov_len = bytes_to_send;					   // 第二个缓冲区需要写入的长度
 		}
-		else
+		else  // 第一部分缓冲区还没有发送完
 		{
-			m_iv[0].iov_base = m_write_buf + bytes_have_send;
-			m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
+			m_iv[0].iov_base = m_write_buf + bytes_have_send;	  // 更新需要发送的部分
+			m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;  // 更新需要发送的长度
 		}
 
-		if (bytes_to_send <= 0)
+		if (bytes_to_send <= 0)	 // 数据全部发送完
 		{
-			unmap();
-			modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+			unmap();  // 解除文件内存映射
 
-			if (m_linger)
+			modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);  // 改为读取事件，等待有数据读取
+
+			if (m_linger)  // 如果是持续性连接
 			{
-				init();
+				init();	 // 重新初始化连接
+
 				return true;
 			}
-			else
+			else  // 非持久化连接
 			{
 				return false;
 			}
