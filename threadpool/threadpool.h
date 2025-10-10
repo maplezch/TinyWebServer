@@ -97,47 +97,67 @@ threadpool<T>::threadpool(int actor_model, connection_pool *connPool, int thread
 }
 
 template <typename T>
-threadpool<T>::~threadpool()
+threadpool<T>::~threadpool()  // 析构函数
 {
-	delete[] m_threads;
+	delete[] m_threads;	 // 释放资源
 }
 
 template <typename T>
-bool threadpool<T>::append(T *request, int state)
+bool threadpool<T>::append(T *request, int state)  // 将新任务加入队列
 {
-	m_queuelocker.lock();
-	if (m_workqueue.size() >= m_max_requests)
+	m_queuelocker.lock();  // 将请求队列用互斥锁锁住
+
+	if (m_workqueue.size() >= m_max_requests)  // 队列的大小大于等于最大等待的数量，无法加入
 	{
-		m_queuelocker.unlock();
+		m_queuelocker.unlock();	 // 解锁
+
 		return false;
 	}
-	request->m_state = state;
-	m_workqueue.push_back(request);
-	m_queuelocker.unlock();
-	m_queuestat.post();
+
+	request->m_state = state;  // 设置任务的状态。
+							   // 在 HTTP 服务器中，这个状态通常表示：
+							   // state = 0 → 读请求；
+							   // state = 1 → 写请求；
+
+	m_workqueue.push_back(request);	 // 加入等待队列
+
+	m_queuelocker.unlock();	 // 解锁
+
+	m_queuestat.post();	 // 通知信号量（m_queuestat）增加一个可用任务。
+						 // 这一步的作用是唤醒阻塞等待任务的工作线程。
+						 // 工作线程通常在 wait() 信号量时休眠；
+	// 当有任务时，post() 会让其中一个线程醒来处理任务。
+
 	return true;
 }
 
 template <typename T>
-bool threadpool<T>::append_p(T *request)
+bool threadpool<T>::append_p(T *request)  // 不区分状态的添加任务
 {
 	m_queuelocker.lock();
+
 	if (m_workqueue.size() >= m_max_requests)
 	{
 		m_queuelocker.unlock();
 		return false;
 	}
+
 	m_workqueue.push_back(request);
+
 	m_queuelocker.unlock();
+
 	m_queuestat.post();
+
 	return true;
 }
 
 template <typename T>
 void *threadpool<T>::worker(void *arg)
 {
-	threadpool *pool = (threadpool *) arg;
+	threadpool *pool = (threadpool *) arg;	// 把 void* 转回原类型：create函数要求第四个参数为void*
+
 	pool->run();
+
 	return pool;
 }
 
@@ -147,50 +167,70 @@ void threadpool<T>::run()
 	while (true)
 	{
 		m_queuestat.wait();
-		m_queuelocker.lock();
-		if (m_workqueue.empty())
+		// 如果任务队列为空，线程会阻塞在这里等待。
+		// 当有新任务加入时，append() 会调用 m_queuestat.post() 唤醒线程。
+
+		m_queuelocker.lock();  // 队列加锁
+
+		if (m_workqueue.empty())  // 任务队列为空
 		{
-			m_queuelocker.unlock();
+			m_queuelocker.unlock();	 // 解锁
+
 			continue;
 		}
-		T *request = m_workqueue.front();
-		m_workqueue.pop_front();
-		m_queuelocker.unlock();
-		if (!request) continue;
-		if (1 == m_actor_model)
+
+		T *request = m_workqueue.front();  // 取出队首任务
+
+		m_workqueue.pop_front();  // 弹出队首任务
+
+		m_queuelocker.unlock();	 // 解锁队列
+
+		if (!request) continue;	 // 队列为空则继续下一个循环
+
+		if (1 == m_actor_model)	 // Reactor 模型（I/O 事件驱动，先读写再处理）
 		{
-			if (0 == request->m_state)
+			if (0 == request->m_state)	// 0 → 读事件
 			{
-				if (request->read_once())
-				{
-					request->improv = 1;
-					connectionRAII mysqlcon(&request->mysql, m_connPool);
-					request->process();
+				if (request->read_once())  // 尝试一次性读取请求数据
+				{						   // 一次性读取成功
+					request->improv =
+						1;	//// 改进标志位（常用于同步或线程池通信时标记该连接的处理进展）
+
+					connectionRAII mysqlcon(&request->mysql,
+											m_connPool);  // RAII 管理 MySQL 连接，确保自动释放
+
+					request->process();	 // 任务处理
 				}
 				else
 				{
 					request->improv = 1;
-					request->timer_flag = 1;
+
+					request->timer_flag = 1;  // 标记超时定时器需要处理
 				}
 			}
-			else
+			else  // 写事件
 			{
-				if (request->write())
+				if (request->write())  // 尝试写
 				{
 					request->improv = 1;
 				}
-				else
+				else  // 写失败
 				{
 					request->improv = 1;
+
 					request->timer_flag = 1;
 				}
 			}
 		}
-		else
+		else  // Proactor 模型（I/O 完成直接处理）
 		{
 			connectionRAII mysqlcon(&request->mysql, m_connPool);
+
 			request->process();
 		}
+
+		// Reactor：事件驱动 → 应用程序执行 I/O → 再处理
+		// Proactor：I / O 完成驱动 → 应用程序处理结果
 	}
 }
 
