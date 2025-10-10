@@ -828,9 +828,11 @@ bool http_conn::add_status_line(int status,
 						title);	 // 将格式化后的状态行添加到响应缓冲区
 }
 
-bool http_conn::add_headers(int content_len)
+bool http_conn::add_headers(int content_len)  // 将所有的必要响应头添加到响应中
 {
 	return add_content_length(content_len) && add_linger() && add_blank_line();
+	// 响应内容长度、是否持久连接、
+	// add_blank_line()：在头部后添加一个空行，HTTP 响应头和响应体之间需要一个空行。
 }
 
 bool http_conn::add_content_length(int content_len)
