@@ -939,16 +939,21 @@ bool http_conn::process_write(HTTP_CODE ret)
 
 void http_conn::process()
 {
-	HTTP_CODE read_ret = process_read();
-	if (read_ret == NO_REQUEST)
+	HTTP_CODE read_ret = process_read();  // 解析接受到的报文
+
+	if (read_ret == NO_REQUEST)	 // 没有需要处理
 	{
-		modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+		modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);  // 事件改为等待读取
 		return;
 	}
-	bool write_ret = process_write(read_ret);
-	if (!write_ret)
+
+	// 有事件需要处理
+	bool write_ret = process_write(read_ret);  // 写到缓冲区
+
+	if (!write_ret)	 // 写失败
 	{
-		close_conn();
+		close_conn();  // 关闭连接
 	}
-	modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+
+	modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);  // 更改监听事件为等待写
 }

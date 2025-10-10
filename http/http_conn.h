@@ -117,6 +117,7 @@ class http_conn
 	{
 		return m_read_buf + m_start_line;
 	};
+
 	LINE_STATUS parse_line();
 
 	void unmap();
