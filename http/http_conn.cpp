@@ -835,27 +835,27 @@ bool http_conn::add_headers(int content_len)  // 将所有的必要响应头添�
 	// add_blank_line()：在头部后添加一个空行，HTTP 响应头和响应体之间需要一个空行。
 }
 
-bool http_conn::add_content_length(int content_len)
+bool http_conn::add_content_length(int content_len)	 // 添加响应内容长度
 {
 	return add_response("Content-Length:%d\r\n", content_len);
 }
 
-bool http_conn::add_content_type()
+bool http_conn::add_content_type()	// 添加响应内容类型
 {
 	return add_response("Content-Type:%s\r\n", "text/html");
 }
 
-bool http_conn::add_linger()
+bool http_conn::add_linger()  // 添加是否保持连接字段
 {
 	return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
 }
 
-bool http_conn::add_blank_line()
+bool http_conn::add_blank_line()  // 添加空行
 {
 	return add_response("%s", "\r\n");
 }
 
-bool http_conn::add_content(const char *content)
+bool http_conn::add_content(const char *content)  // 添加响应体
 {
 	return add_response("%s", content);
 }
@@ -866,9 +866,14 @@ bool http_conn::process_write(HTTP_CODE ret)
 	{
 		case INTERNAL_ERROR:
 		{
-			add_status_line(500, error_500_title);
-			add_headers(strlen(error_500_form));
+			add_status_line(500, error_500_title);	// 添加响应状态行，内部错误
+
+			add_headers(strlen(error_500_form));  // 添加其它响应头
+												  // content-length为响应体长度
+
+			// 添加响应体
 			if (!add_content(error_500_form)) return false;
+
 			break;
 		}
 		case BAD_REQUEST:
@@ -887,32 +892,48 @@ bool http_conn::process_write(HTTP_CODE ret)
 		}
 		case FILE_REQUEST:
 		{
-			add_status_line(200, ok_200_title);
-			if (m_file_stat.st_size != 0)
+			add_status_line(200, ok_200_title);	 // 添加响应状态行，内部错误
+
+			if (m_file_stat.st_size != 0)  // 文件大小不为空
 			{
-				add_headers(m_file_stat.st_size);
+				add_headers(m_file_stat.st_size);  // 添加响应头
+
+				// 第一个缓冲区存储响应状态行和响应头
 				m_iv[0].iov_base = m_write_buf;
 				m_iv[0].iov_len = m_write_idx;
+
+				// 第二个缓冲区存储响应体（请求的文件）
 				m_iv[1].iov_base = m_file_address;
 				m_iv[1].iov_len = m_file_stat.st_size;
-				m_iv_count = 2;
-				bytes_to_send = m_write_idx + m_file_stat.st_size;
+
+				m_iv_count = 2;	 // 两个缓冲区都要传输
+
+				bytes_to_send = m_write_idx + m_file_stat.st_size;	// 要发送的总字节数
+
 				return true;
 			}
-			else
+			else  // 文件为空
 			{
-				const char *ok_string = "<html><body></body></html>";
-				add_headers(strlen(ok_string));
-				if (!add_content(ok_string)) return false;
+				const char *ok_string = "<html><body></body></html>";  // 空页面
+
+				add_headers(strlen(ok_string));	 // 添加响应头
+
+				if (!add_content(ok_string)) return false;	// 添加响应体
 			}
 		}
 		default:
-			return false;
+			return false;  // 其它情况非法
 	}
+
+	// 非文件请求情况
+	//  设置缓冲区
 	m_iv[0].iov_base = m_write_buf;
 	m_iv[0].iov_len = m_write_idx;
+
 	m_iv_count = 1;
+
 	bytes_to_send = m_write_idx;
+
 	return true;
 }
 
