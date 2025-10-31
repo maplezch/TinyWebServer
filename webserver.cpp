@@ -37,7 +37,7 @@ void WebServer::init(int port, string user, string passWord, string databaseName
 					 int opt_linger, int trigmode, int sql_num, int thread_num, int close_log,
 					 int actor_model)
 {
-	m_port = port;
+	m_port = port;	// 主机端口号
 
 	m_user = user;					// 登陆数据库用户名
 	m_passWord = passWord;			// 登陆数据库密码
@@ -48,7 +48,7 @@ void WebServer::init(int port, string user, string passWord, string databaseName
 
 	m_log_write = log_write;  // 日志写的模式
 
-	m_OPT_LINGER = opt_linger;
+	m_OPT_LINGER = opt_linger;	// 是否优雅的关闭连接
 
 	m_TRIGMode = trigmode;	  // 触发模式：表示 epoll 的工作模式
 	m_close_log = close_log;  // 是否关闭日志
@@ -161,33 +161,90 @@ void WebServer::eventListen()
 	// };
 
 	int ret = 0;
+
 	struct sockaddr_in address;
 	// sockaddr_in 是定义在 <netinet/in.h> 中的一个结构体，用来描述 IPv4 地址与端口（用于
 	// bind、connect、recvfrom 等套接字调用）。
 	// sa_family_t sin_family; // 地址族（例如 AF_INET）
 	// in_port_t sin_port;	 // 16-bit 端口（网络字节序）
-	// struct in_addr sin_addr;  // IPv4 地址（32-bit，网络字节序）
+	// struct in_addr sin_addr;  // IPv4 地址（32-bit，网络字节序，大端序）
 
-	bzero(&address, sizeof(address));
-	address.sin_family = AF_INET;
+	bzero(&address, sizeof(address));  // 将 address 结构体的所有字节清零（把所有字段初始化为
+									   // 0），以避免结构中存在未定义的“垃圾值”。
+
+	address.sin_family = AF_INET;  // 设置为IPv4地址族
+
 	address.sin_addr.s_addr = htonl(INADDR_ANY);
+	// INADDR_ANY
+	// 是一个宏，数值上等于0，意味着把套接字绑定到主机的所有可用网络接口（比如本地回环、以太网、Wi-Fi
+	// 等）。
+	//  htonl()：Host TO Network Long（将 32
+	//  位整数从主机字节序转换为网络字节序）。网络字节序是大端（big-endian）。
+	//  在小端主机（如 x86）上，这一步会把字节顺序翻转为网络序；在大端主机上这通常是 no-op(no
+	//  operation)。
+
 	address.sin_port = htons(m_port);
+	// htons()：Host TO Network Short（把 16 位整数从主机字节序转换为网络字节序）。
 
 	int flag = 1;
 	setsockopt(m_listenfd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+	// SO_REUSEADDR：允许重用本地地址/端口
+	// flag 其实是一个“开关值”（布尔参数），它的作用取决于所设置的套接字选项（此处是
+	// SO_REUSEADDR）
+	// flag 是选项的“值”，告诉内核该功能是开还是关
+	// 当 flag = 1 时：表示 启用 这个选项（即允许地址重用）。
+	// 当 flag = 0 时：表示 关闭 这个选项（即禁止地址重用）。
+
+	// flag 的实质意义（对于 SO_REUSEADDR）
+	// 当 flag = 1 时，允许套接字在以下情况下“重用”地址：
+	// 服务器刚刚退出（TCP连接还处于 TIME_WAIT 状态），新程序仍然可以立即在同一个端口上 bind；
+	// 这样可以避免 “Address already in use” 错误；
+	// 特别常见于服务器重启场景。
+
 	ret = bind(m_listenfd, (struct sockaddr *) &address, sizeof(address));
-	assert(ret >= 0);
-	ret = listen(m_listenfd, 5);
+	// 把套接字 m_listenfd 绑定到本地地址 address（IP +
+	// 端口）。只有绑定之后，内核才知道该套接字要监听哪个本地地址/端口。
+
 	assert(ret >= 0);
 
-	utils.init(TIMESLOT);
+	ret = listen(m_listenfd, 5);
+	// 把已绑定的套接字 m_listenfd 转换为监听状态，内核开始排队等待连接请求。这个套接字现在可以被
+	// accept() 用来接受客户端连接
+	// 5：backlog（未完成连接或已完成连接但尚未被 accept 取走的套接字队列长度上限）
+	// backlog
+	// 指示内核在队列中能保持的未处理连接数上限，超过后新的连接请求可能被拒绝或客户端可能收到连接错误。
+
+	assert(ret >= 0);
+
+	utils.init(TIMESLOT);  // 设置定时器触发的时间间隔
 
 	// epoll创建内核事件表
 	epoll_event events[MAX_EVENT_NUMBER];
+	// 声明一个 events 数组，用来 接收 epoll_wait 返回的事件。
+	// MAX_EVENT_NUMBER 是程序中定义的最大同时监听事件数量
+	// 当调用 epoll_wait 时，如果有文件描述符（socket）就绪，这个数组就会被填充。
+
+	// struct epoll_event
+	// {
+	// 	uint32_t events;	// 感兴趣的事件类型，如可读/可写/错误
+	// 	epoll_data_t data;	// 用户自定义数据，一般用来保存fd
+	// };
+
 	m_epollfd = epoll_create(5);
+	// int epoll_create(int size);
+	// size 早期版本表示 预估监听的 fd 数量，现代 Linux 已经忽略这个参数（但必须 > 0）。
+	// 返回一个 epoll 实例的 文件描述符。出错返回 - 1。
+
 	assert(m_epollfd != -1);
 
-	utils.addfd(m_epollfd, m_listenfd, false, m_LISTENTrigmode);
+	utils.addfd(m_epollfd, m_listenfd, false,
+				m_LISTENTrigmode);	// 将文件描述符 fd 添加到 epoll 实例中
+									// m_epollfd：epoll 实例的文件描述符。
+	//  m_listenfd：需要添加到 epoll 监听的文件描述符。
+	//  one_shot=false：是否启用 EPOLLONESHOT。如果为 true，意味着一次性事件触发后该事件会自动从
+	//  epoll中移除，避免事件重复触发。
+	//  TRIGMode：触发模式，表示事件的工作模式。0为LT，1为ET
+
 	http_conn::m_epollfd = m_epollfd;
 
 	ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);

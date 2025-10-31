@@ -82,6 +82,7 @@ class WebServer
 
 	// 定时器相关
 	client_data *users_timer;
-	Utils utils;
+
+	Utils utils;  // 封装的工具类（包含定时器列表）
 };
 #endif
