@@ -15,7 +15,7 @@ using namespace std;
 class Log
 {
    public:
-	// C++11以后,使用局部变量懒汉不用加锁
+	// C++11以后,使用static局部变量懒汉不用加锁
 	static Log *get_instance()	// 返回一个 指向唯一 Log 对象的指针。
 	{
 		static Log instance;  // 局部静态变量，只会构造一次

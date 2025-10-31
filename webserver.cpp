@@ -56,13 +56,13 @@ void WebServer::init(int port, string user, string passWord, string databaseName
 	m_actormodel = actor_model;	 // 并发模型
 }
 
-void WebServer::trig_mode()
+void WebServer::trig_mode()	 // 触发模式设置
 {
 	// LT + LT
 	if (0 == m_TRIGMode)
 	{
-		m_LISTENTrigmode = 0;
-		m_CONNTrigmode = 0;
+		m_LISTENTrigmode = 0;  // 监听套接字（即服务器用来 accept() 新连接的 socket）的触发模式。
+		m_CONNTrigmode = 0;	   // 已建立连接的 socket（即客户端通信的连接）的触发模式。
 	}
 	// LT + ET
 	else if (1 == m_TRIGMode)
@@ -83,6 +83,10 @@ void WebServer::trig_mode()
 		m_CONNTrigmode = 1;
 	}
 }
+// LT（Level Trigger）	水平触发
+// 默认模式。只要缓冲区中有数据，就会不断触发事件。实现简单，但效率略低。
+// ET（Edge Trigger） 边缘触发 只在状态变化时触发一次。更高效，但要求使用 非阻塞IO 并一次性读
+// /写完数据，否则可能丢事件。
 
 void WebServer::log_write()
 {
@@ -90,9 +94,13 @@ void WebServer::log_write()
 	{
 		// 初始化日志
 		if (1 == m_log_write)
-			Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 800);
+			Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000,
+									  800);	 // 最长日志队列为800
+											 // 异步日志
 		else
-			Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 0);
+			Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000,
+									  0);  // 最长日志队列为0
+										   // 同步日志
 	}
 }
 
@@ -116,24 +124,50 @@ void WebServer::thread_pool()  // 创建线程池
 
 void WebServer::eventListen()
 {
+	// 服务器的监听初始化，主要负责：
+	// 创建监听套接字、绑定端口、启动监听、设置 epoll 事件表、注册信号处理函数等。
+
 	// 网络编程基础步骤
-	m_listenfd = socket(PF_INET, SOCK_STREAM, 0);
-	assert(m_listenfd >= 0);
+	m_listenfd = socket(PF_INET, SOCK_STREAM, 0);  // 创建一个 TCP 套接字（IPv4）。
+												   // PF_INET：使用 IPv4 协议族。
+												   // SOCK_STREAM：流式套接字，对应 TCP。
+												   // 0 表示让系统自动选择默认协议。
+	// 在 PF_INET + SOCK_STREAM 的组合下，系统会自动选择 TCP。
+
+	assert(m_listenfd >= 0);  // 确保创建成功，否则程序直接中止。
 
 	// 优雅关闭连接
 	if (0 == m_OPT_LINGER)
 	{
-		struct linger tmp = {0, 1};
-		setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
+		struct linger tmp = {0, 1};	 // 立即关闭连接，丢弃未发送数据（默认方式）
+		setsockopt(
+			m_listenfd, SOL_SOCKET, SO_LINGER, &tmp,
+			sizeof(tmp));  // 给指定的套接字（socket）设置某种选项（option），用来控制该socket
+						   // 的行为。 m_listenfd：套接字文件描述符（监听socket）。
+						   // SOL_SOCKET：选项所在层（socket 层）。
+		// SO_LINGER：设置或查询关闭（close() / shutdown()）时 socket 的 linger 行为。
+		// 最后两个参数是传入 struct linger 的地址与大小。
 	}
 	else if (1 == m_OPT_LINGER)
 	{
-		struct linger tmp = {1, 1};
+		struct linger tmp = {1, 1};	 // 优雅关闭连接，等待最多 1 秒把数据发送完再关闭
 		setsockopt(m_listenfd, SOL_SOCKET, SO_LINGER, &tmp, sizeof(tmp));
 	}
 
+	// struct linger
+	// {
+	// int l_onoff;   //是否开启 linger 行为（非 0 表示开启，0 表示关闭）。
+	// 	int l_linger;  // linger 超时时间（单位：秒）
+	// };
+
 	int ret = 0;
 	struct sockaddr_in address;
+	// sockaddr_in 是定义在 <netinet/in.h> 中的一个结构体，用来描述 IPv4 地址与端口（用于
+	// bind、connect、recvfrom 等套接字调用）。
+	// sa_family_t sin_family; // 地址族（例如 AF_INET）
+	// in_port_t sin_port;	 // 16-bit 端口（网络字节序）
+	// struct in_addr sin_addr;  // IPv4 地址（32-bit，网络字节序）
+
 	bzero(&address, sizeof(address));
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = htonl(INADDR_ANY);

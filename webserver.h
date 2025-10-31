@@ -34,8 +34,10 @@ class WebServer
 
 	void sql_pool();  // 初始化数据库及连接
 
-	void log_write();
-	void trig_mode();
+	void log_write();  // 初始化写日志相关
+
+	void trig_mode();  // 触发模式设置
+
 	void eventListen();
 	void eventLoop();
 	void timer(int connfd, struct sockaddr_in client_address);
