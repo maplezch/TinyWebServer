@@ -157,4 +157,4 @@ Program received signal SIGSEGV, Segmentation fault.
 
 ---
 
-同时，作者也想特别感谢 qinguoyi 的开源分享，让我能够在学习该项目并从中受益良多。
+同时，作者也想特别感谢 qinguoyi 的开源分享，让作者能够在学习该项目并从中受益良多。
