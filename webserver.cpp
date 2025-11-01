@@ -505,7 +505,7 @@ void WebServer::dealwithwrite(int sockfd)
 			adjust_timer(timer);  // 修正定时器时间
 		}
 
-		m_pool->append(users + sockfd, 1);
+		m_pool->append(users + sockfd, 1);	// 写事件加入等待队列
 
 		while (true)
 		{
@@ -535,22 +535,32 @@ void WebServer::dealwithwrite(int sockfd)
 				adjust_timer(timer);
 			}
 		}
-		else
+		else  // 出错或者非持久化连接
 		{
 			deal_timer(timer, sockfd);
 		}
 	}
 }
 
-void WebServer::eventLoop()
+void WebServer::eventLoop()	 // 主事件循环
 {
-	bool timeout = false;
-	bool stop_server = false;
+	bool timeout = false;	   // 超时标志位
+	bool stop_server = false;  // 停止服务器标志位
 
-	while (!stop_server)
+	while (!stop_server)  // 服务器主事件循环，不断监听事件直到 stop_server 为真（要求停止服务器）
 	{
-		int number = epoll_wait(m_epollfd, events, MAX_EVENT_NUMBER, -1);
-		if (number < 0 && errno != EINTR)
+		int number = epoll_wait(m_epollfd, events, MAX_EVENT_NUMBER,
+								-1);  // 阻塞等待内核返回就绪的文件描述符事件。
+									  //-1 表示无限等待直到事件发生。
+									  // 返回的事件的文件描述符在events数组中
+									  // MAX_EVENT_NUMBER 是数组大小；
+									  // 返回值	含义
+									  // > 0 返回就绪的文件描述符数量（即 events 中有效元素的个数）
+		// 0 超时且无事件发生
+		// -1 出错，errno 表示错误原因（如 EINTR 被信号中断）
+
+		if (number < 0 &&
+			errno != EINTR)	 // 出错且不是被信号中断（EINTR）导致，就记录错误并退出循环。
 		{
 			LOG_ERROR("%s", "epoll failure");
 			break;

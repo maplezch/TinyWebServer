@@ -40,7 +40,7 @@ class WebServer
 
 	void eventListen();	 // 监听初始化
 
-	void eventLoop();
+	void eventLoop();  // 主事件循环
 
 	void timer(int connfd, struct sockaddr_in client_address);	// 定时器初始化
 
