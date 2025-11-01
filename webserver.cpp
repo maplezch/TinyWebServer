@@ -566,41 +566,47 @@ void WebServer::eventLoop()	 // 主事件循环
 			break;
 		}
 
-		for (int i = 0; i < number; i++)
+		for (int i = 0; i < number; i++)  // 遍历得到的事件（number个事件）
 		{
 			int sockfd = events[i].data.fd;
 
 			// 处理新到的客户连接
 			if (sockfd == m_listenfd)
 			{
-				bool flag = dealclientdata();
+				bool flag = dealclientdata();  // 处理新连接
+
 				if (false == flag) continue;
 			}
 			else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
 			{
+				// EPOLLRDHUP：对端关闭连接；
+				// EPOLLHUP：挂起；
+				// EPOLLERR：出错；
+
 				// 服务器端关闭连接，移除对应的定时器
 				util_timer *timer = users_timer[sockfd].timer;
-				deal_timer(timer, sockfd);
+				deal_timer(timer, sockfd);	// 关闭连接，移除对应定时器
 			}
 			// 处理信号
-			else if ((sockfd == m_pipefd[0]) && (events[i].events & EPOLLIN))
+			else if ((sockfd == m_pipefd[0]) && (events[i].events & EPOLLIN))  // 管道读端可读
 			{
-				bool flag = dealwithsignal(timeout, stop_server);
+				bool flag = dealwithsignal(timeout, stop_server);  // 信号处理
 				if (false == flag) LOG_ERROR("%s", "dealclientdata failure");
 			}
 			// 处理客户连接上接收到的数据
-			else if (events[i].events & EPOLLIN)
+			else if (events[i].events & EPOLLIN)  // 非管道可读事件
 			{
 				dealwithread(sockfd);
 			}
-			else if (events[i].events & EPOLLOUT)
+			else if (events[i].events & EPOLLOUT)  // 可写事件
 			{
 				dealwithwrite(sockfd);
 			}
 		}
-		if (timeout)
+
+		if (timeout)  // 超时情况
 		{
-			utils.timer_handler();
+			utils.timer_handler();	// 处理掉定时器
 
 			LOG_INFO("%s", "timer tick");
 
