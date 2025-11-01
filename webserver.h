@@ -38,14 +38,22 @@ class WebServer
 
 	void trig_mode();  // 触发模式设置
 
-	void eventListen();
+	void eventListen();	 // 监听初始化
+
 	void eventLoop();
-	void timer(int connfd, struct sockaddr_in client_address);
+
+	void timer(int connfd, struct sockaddr_in client_address);	// 定时器初始化
+
 	void adjust_timer(util_timer *timer);
+
 	void deal_timer(util_timer *timer, int sockfd);
+
 	bool dealclientdata();
+
 	bool dealwithsignal(bool &timeout, bool &stop_server);
+
 	void dealwithread(int sockfd);
+
 	void dealwithwrite(int sockfd);
 
    public:

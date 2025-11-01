@@ -17,7 +17,7 @@ WebServer::WebServer()
 	strcat(m_root, root);
 
 	// 定时器
-	users_timer = new client_data[MAX_FD];
+	users_timer = new client_data[MAX_FD];	// 定时器和地址及套接字结构体
 }
 
 WebServer::~WebServer()
@@ -50,7 +50,8 @@ void WebServer::init(int port, string user, string passWord, string databaseName
 
 	m_OPT_LINGER = opt_linger;	// 是否优雅的关闭连接
 
-	m_TRIGMode = trigmode;	  // 触发模式：表示 epoll 的工作模式
+	m_TRIGMode = trigmode;	// 触发模式：表示 epoll 的工作模式
+
 	m_close_log = close_log;  // 是否关闭日志
 
 	m_actormodel = actor_model;	 // 并发模型
@@ -247,16 +248,41 @@ void WebServer::eventListen()
 
 	http_conn::m_epollfd = m_epollfd;
 
-	ret = socketpair(PF_UNIX, SOCK_STREAM, 0, m_pipefd);
+	ret = socketpair(PF_UNIX, SOCK_STREAM, 0,
+					 m_pipefd);	 // 创建一对互相连接的套接字（socket），通常用于进程间通信（IPC）。
+								 // PF_UNIX指定套接字的协议族（Protocol Family），这里是 UNIX
+								 // 域套接字（也称本地套接字），只能在同一台机器的进程间通信。
+								 // SOCK_STREAM表示 流式套接字，提供面向连接、可靠、顺序的字节流通信
+								 // 协议参数，一般设置为 0，系统会自动选择合适的协议（对于 PF_UNIX +
+								 // SOCK_STREAM，通常就是 UNIX TCP 流）。
+								 // m_pipefd
+								 // 一个整型数组 int m_pipefd[2]，函数执行成功后：
+								 // m_pipefd[0] 和 m_pipefd[1] 就是两个互通的套接字描述符。
+								 // 从本质上讲，它像一个 双向管道。
+								 // 成功返回 0，失败返回 -1
+
 	assert(ret != -1);
-	utils.setnonblocking(m_pipefd[1]);
-	utils.addfd(m_epollfd, m_pipefd[0], false, 0);
 
-	utils.addsig(SIGPIPE, SIG_IGN);
-	utils.addsig(SIGALRM, utils.sig_handler, false);
-	utils.addsig(SIGTERM, utils.sig_handler, false);
+	// 虽然m_pipefd是一个双向管道，但在逻辑上当作m_pipefd[1]是写端，m_pipefd[0]是读端
+	utils.setnonblocking(m_pipefd[1]);	// 将 m_pipefd[1] 设置为 非阻塞模式。
 
-	alarm(TIMESLOT);
+	utils.addfd(m_epollfd, m_pipefd[0], false, 0);	// 将读端加入epoll监听列表
+
+	utils.addsig(SIGPIPE, SIG_IGN);	 // 忽略 SIGPIPE 信号。
+									 // 当你向一个已被对端关闭的 socket 写数据时，内核会向进程发送
+	// SIGPIPE，默认行为是终止进程。对于网络服务程序通常不希望进程被这种信号直接杀死。
+	// SIG_IGN 是一个 宏常量，定义在头文件 <signal.h> 中。它代表的意思是 “Ignore Signal” ——
+	// 忽略信号。
+
+	utils.addsig(SIGALRM, utils.sig_handler,
+				 false);  // 为 SIGALRM 注册一个自定义信号处理函数 utils.sig_handler
+	// restart：默认为true，表示是否在处理信号后重启系统调用，通常用来处理阻塞的系统调用。此处是false
+	// SIGALRM 是由系统提供的 定时器信号。
+
+	utils.addsig(SIGTERM, utils.sig_handler, false);  // 为 SIGTERM 注册 sig_handler
+	// SIGTERM 是用来请求程序正常终止的信号
+
+	alarm(TIMESLOT);  // 设置一个定时闹钟：在 TIMESLOT 秒之后内核会向进程发送 SIGALRM。
 
 	// 工具类,信号和描述符基础操作
 	Utils::u_pipefd = m_pipefd;
@@ -266,17 +292,19 @@ void WebServer::eventListen()
 void WebServer::timer(int connfd, struct sockaddr_in client_address)
 {
 	users[connfd].init(connfd, client_address, m_root, m_CONNTrigmode, m_close_log, m_user,
-					   m_passWord, m_databaseName);
+					   m_passWord, m_databaseName);	 // 初始化http_conn的各项参数
 
 	// 初始化client_data数据
 	// 创建定时器，设置回调函数和超时时间，绑定用户数据，将定时器添加到链表中
 	users_timer[connfd].address = client_address;
 	users_timer[connfd].sockfd = connfd;
+
 	util_timer *timer = new util_timer;
 	timer->user_data = &users_timer[connfd];
 	timer->cb_func = cb_func;
-	time_t cur = time(NULL);
-	timer->expire = cur + 3 * TIMESLOT;
+
+	time_t cur = time(NULL);			 // 获取当前时间
+	timer->expire = cur + 3 * TIMESLOT;	 // 过期时间
 	users_timer[connfd].timer = timer;
 	utils.m_timer_lst.add_timer(timer);
 }
@@ -294,10 +322,11 @@ void WebServer::adjust_timer(util_timer *timer)
 
 void WebServer::deal_timer(util_timer *timer, int sockfd)
 {
-	timer->cb_func(&users_timer[sockfd]);
-	if (timer)
+	timer->cb_func(&users_timer[sockfd]);  // 删除epoll，关闭连接
+
+	if (timer)	// 非空指针为true
 	{
-		utils.m_timer_lst.del_timer(timer);
+		utils.m_timer_lst.del_timer(timer);	 // 删除定时器列表中的定时器
 	}
 
 	LOG_INFO("close fd %d", users_timer[sockfd].sockfd);
